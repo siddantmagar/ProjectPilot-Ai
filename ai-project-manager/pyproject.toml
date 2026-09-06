@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that call the real local Ollama model (slow, ~15-25s each)",
+]
