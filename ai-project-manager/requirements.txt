@@ -1,0 +1,11 @@
+langgraph
+langchain
+langchain-ollama
+fastapi
+uvicorn
+streamlit
+chromadb
+pydantic
+httpx
+python-dotenv
+pytest
