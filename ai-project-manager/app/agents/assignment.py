@@ -52,6 +52,9 @@ def run_assignment_agent(
 		"member based on availability.' Do NOT invent a tenuous or unrelated skill "
 		"connection to justify the assignment - for example, do not claim an unrelated "
 		"skill like React is relevant to a task like writing a launch announcement. "
+		"For recommended_assignee, you MUST copy the exact 'name' field value from "
+		"the team roster above, character-for-character. Do not abbreviate, truncate, "
+		"or modify the name in any way. "
 		"Honesty about missing skill matches is required, not optional. "
 		"Respond only with JSON matching the requested schema."
 	)
@@ -60,8 +63,8 @@ def run_assignment_agent(
 	last_error = ""
 
 	# Make one initial request and allow up to two corrective retries.
-	for attempt in range(1, 4):
-		logger.info("Assignment attempt %d of 3", attempt)
+	for attempt in range(1, 6):
+		logger.info("Assignment attempt %d of 5", attempt)
 
 		# Ask Ollama for one structured response containing the whole assignment batch.
 		response = chat(
@@ -116,7 +119,7 @@ def run_assignment_agent(
 			)
 
 			# Give the model the exact failure so the next attempt can correct it.
-			if attempt < 3:
+			if attempt < 5:
 				prompt = (
 					f"{prompt}\n\n"
 					f"Your previous response had this error: {last_error}. "
@@ -129,7 +132,7 @@ def run_assignment_agent(
 
 	# Preserve both response and error details for debugging failed runs.
 	raise AssignmentValidationError(
-		"Assignment output remained invalid after 3 attempts. "
+		"Assignment output remained invalid after 5 attempts. "
 		f"Last validation error: {last_error}. "
 		f"Last raw model output: {last_raw_output}"
 	)
