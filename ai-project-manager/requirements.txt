@@ -10,3 +10,5 @@ pydantic
 httpx
 python-dotenv
 pytest
+sqlalchemy
+alembic
