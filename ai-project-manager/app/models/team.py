@@ -10,7 +10,12 @@ class TeamMember(BaseModel):
 
 	name: str
 	skills: dict[str, Literal["low", "medium", "high"]]
-	workload_percent: int = Field(ge=0, le=100)
+	# Legacy field kept for backward compatibility; superseded by the Phase 2
+	# weekly_capacity_hours-based workload calculation.
+	workload_percent: int = Field(ge=0, le=100, default=0)
+	jira_account_id: str | None = None
+	email: str | None = None
+	weekly_capacity_hours: int | None = None
 
 
 SAMPLE_TEAM = [
