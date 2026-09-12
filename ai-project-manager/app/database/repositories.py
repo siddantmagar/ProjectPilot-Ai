@@ -95,17 +95,27 @@ class TaskJiraLinkRepository:
 		).first()
 		return row.jira_issue_key if row else None
 
+	def get_issue_id(self, project_key: str, task_title: str) -> str | None:
+		"""Return the existing Jira issue ID for this project task, if any."""
+		row = self._session.query(TaskJiraLinkORM).filter_by(
+			project_key=project_key,
+			task_title=task_title,
+		).first()
+		return row.jira_issue_id if row else None
+
 	def record_link(
 		self,
 		project_key: str,
 		task_title: str,
 		jira_issue_key: str,
+		jira_issue_id: str,
 	) -> None:
 		"""Store a task-to-issue link after the caller's duplicate pre-check."""
 		row = TaskJiraLinkORM(
 			project_key=project_key,
 			task_title=task_title,
 			jira_issue_key=jira_issue_key,
+			jira_issue_id=jira_issue_id,
 		)
 		self._session.add(row)
 		self._session.commit()

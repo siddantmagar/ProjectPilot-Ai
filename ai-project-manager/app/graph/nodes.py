@@ -9,12 +9,44 @@ def planner_node(state: ProjectPilotState) -> dict:
     return {"planner_output": result}
 
 
-def stub_status_node(state: ProjectPilotState) -> dict:
-    """Generate placeholder statuses and update the shared state."""
-    from app.graph.stubs import generate_stub_statuses
+def status_sync_node(state: ProjectPilotState) -> dict:
+    """Replace stubbed statuses with real Jira status data and mapped states."""
+    from app.integrations.jira.client import search_issues_by_project
+    from app.integrations.jira.status_map import map_jira_status
+    from app.models.progress import TaskStatusEntry
+    import os
 
-    result = generate_stub_statuses(state["planner_output"])
-    return {"statuses": result}
+    project_key = os.getenv("JIRA_PROJECT_KEY")
+    jira_issue_keys = state.get("jira_issue_keys") or {}
+    jira_issue_ids = state.get("jira_issue_ids") or {}
+    issue_key_to_title = {value: key for key, value in jira_issue_keys.items()}
+
+    raw_issues = search_issues_by_project(
+        project_key,
+        reconcile_issue_ids=list(jira_issue_ids.values()),
+    )
+
+    statuses = []
+    for issue in raw_issues:
+        task_title = issue_key_to_title.get(issue["key"])
+        if task_title is None:
+            continue
+
+        status_name = issue["fields"]["status"]["name"]
+        status_category = issue["fields"]["status"]["statusCategory"]["name"]
+        internal_status = map_jira_status(
+            project_key, status_name, status_category
+        )
+        statuses.append(
+            TaskStatusEntry(
+                task_title=task_title,
+                status=internal_status,
+                jira_status_name=status_name,
+                is_overdue=bool(issue["fields"].get("flagged", False)),
+            )
+        )
+
+    return {"statuses": statuses}
 
 
 def assignment_node(state: ProjectPilotState) -> dict:
@@ -102,11 +134,15 @@ def jira_creation_node(state: ProjectPilotState) -> dict:
     try:
         link_repo = TaskJiraLinkRepository(session)
         issue_keys: dict[str, str] = {}
+        issue_ids: dict[str, str] = {}
 
         for task in state["planner_output"].tasks:
             existing_key = link_repo.get_issue_key(project_key, task.title)
             if existing_key:
+                existing_id = link_repo.get_issue_id(project_key, task.title)
                 issue_keys[task.title] = existing_key
+                if existing_id is not None:
+                    issue_ids[task.title] = existing_id
                 continue
 
             try:
@@ -122,9 +158,15 @@ def jira_creation_node(state: ProjectPilotState) -> dict:
                     f"{len(state['planner_output'].tasks)} issues: {error}"
                 ) from error
 
-            link_repo.record_link(project_key, task.title, response.key)
+            link_repo.record_link(
+                project_key,
+                task.title,
+                response.key,
+                response.id,
+            )
             issue_keys[task.title] = response.key
+            issue_ids[task.title] = response.id
 
-        return {"jira_issue_keys": issue_keys}
+        return {"jira_issue_keys": issue_keys, "jira_issue_ids": issue_ids}
     finally:
         session.close()

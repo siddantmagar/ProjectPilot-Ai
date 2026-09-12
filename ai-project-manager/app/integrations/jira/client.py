@@ -279,19 +279,30 @@ def get_assignable_users_for_project(
 	return [JiraUserResponse.model_validate(user) for user in users]
 
 
-def search_issues_by_project(project_key: str | None = None) -> list[dict]:
-	"""Fetch raw issue data for a project through Jira's current JQL endpoint."""
+def search_issues_by_project(
+	project_key: str | None = None,
+	reconcile_issue_ids: list[str] | None = None,
+) -> list[dict]:
+	"""Fetch raw issue data for a project through Jira's current JQL endpoint.
+
+	``reconcile_issue_ids`` asks Jira to include specific newly created issues
+	while its JQL index catches up. Jira limits this reconciliation list to 50
+	IDs, and HTTPX encodes the list as repeated query parameters.
+	"""
 	base_url, email, token, configured_project_key = _load_config()
 	selected_project_key = project_key or configured_project_key
+	params = {
+		"jql": f"project = {selected_project_key}",
+		"maxResults": 100,
+		"fields": ["summary", "status", "flagged"],
+	}
+	if reconcile_issue_ids:
+		params["reconcileIssues"] = reconcile_issue_ids[:50]
 	try:
 		response = httpx.get(
 			f"{base_url.rstrip('/')}/rest/api/3/search/jql",
 			headers=_auth_header(email, token),
-			params={
-				"jql": f"project = {selected_project_key}",
-				"maxResults": 100,
-				"fields": ["summary", "status", "flagged"],
-			},
+			params=params,
 			timeout=10,
 		)
 	except httpx.TimeoutException as error:

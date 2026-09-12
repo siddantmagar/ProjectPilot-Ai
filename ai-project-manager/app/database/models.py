@@ -37,6 +37,7 @@ class TaskJiraLinkORM(Base):
     project_key: Mapped[str] = mapped_column(String(50), nullable=False)
     task_title: Mapped[str] = mapped_column(String(500), nullable=False)
     jira_issue_key: Mapped[str] = mapped_column(String(50), nullable=False)
+    jira_issue_id: Mapped[str] = mapped_column(String(50), nullable=False)
 
     __table_args__ = (
         UniqueConstraint("project_key", "task_title", name="uq_project_task_title"),

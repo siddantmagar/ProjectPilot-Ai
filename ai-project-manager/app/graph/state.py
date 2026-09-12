@@ -29,3 +29,4 @@ class ProjectPilotState(TypedDict):
 	risk_output: Optional[RiskOutput]
 	report_output: Optional[ReportOutput]
 	jira_issue_keys: Optional[dict[str, str]]
+	jira_issue_ids: Optional[dict[str, str]]

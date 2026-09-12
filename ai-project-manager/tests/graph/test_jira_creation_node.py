@@ -57,7 +57,10 @@ def node_state() -> dict:
 def test_creates_new_issues_when_none_exist(database_session: Session) -> None:
     """Protect against missing Jira issues or skipped creation for new tasks."""
     responses = iter(
-        [SimpleNamespace(key="AIPM-100"), SimpleNamespace(key="AIPM-101")]
+        [
+            SimpleNamespace(key="AIPM-100", id="100"),
+            SimpleNamespace(key="AIPM-101", id="101"),
+        ]
     )
     mock_create_issue = MagicMock(side_effect=lambda **kwargs: next(responses))
     session_factory = MagicMock(return_value=database_session)
@@ -71,6 +74,7 @@ def test_creates_new_issues_when_none_exist(database_session: Session) -> None:
         "Build API": "AIPM-100",
         "Write tests": "AIPM-101",
     }
+    assert result["jira_issue_ids"] == {"Build API": "100", "Write tests": "101"}
     assert mock_create_issue.call_count == 2
 
 
@@ -79,8 +83,8 @@ def test_reuses_existing_link_without_calling_create_issue(
 ) -> None:
     """Protect against duplicate Jira issue creation when a task link already exists."""
     links = TaskJiraLinkRepository(database_session)
-    links.record_link("AIPM", "Build API", "AIPM-42")
-    mock_create_issue = MagicMock(return_value=SimpleNamespace(key="AIPM-101"))
+    links.record_link("AIPM", "Build API", "AIPM-42", "42")
+    mock_create_issue = MagicMock(return_value=SimpleNamespace(key="AIPM-101", id="101"))
     session_factory = MagicMock(return_value=database_session)
 
     with patch("app.database.connection.SessionLocal", session_factory), patch(
@@ -90,6 +94,8 @@ def test_reuses_existing_link_without_calling_create_issue(
 
     assert result["jira_issue_keys"]["Build API"] == "AIPM-42"
     assert result["jira_issue_keys"]["Write tests"] == "AIPM-101"
+    assert result["jira_issue_ids"]["Build API"] == "42"
+    assert result["jira_issue_ids"]["Write tests"] == "101"
     mock_create_issue.assert_called_once()
     assert mock_create_issue.call_args.kwargs["summary"] == "Write tests"
 
@@ -103,7 +109,7 @@ def test_partial_failure_reports_progress(database_session: Session) -> None:
         call_count += 1
         if call_count == 2:
             raise JiraClientError("Jira server problem", status_code=500)
-        return SimpleNamespace(key="AIPM-100")
+        return SimpleNamespace(key="AIPM-100", id="100")
 
     mock_create_issue = MagicMock(side_effect=create_issue_side_effect)
     session_factory = MagicMock(return_value=database_session)

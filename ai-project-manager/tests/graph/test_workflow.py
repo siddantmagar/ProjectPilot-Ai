@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -104,11 +104,46 @@ def test_workflow_structure_with_mocked_agents(
     mock_risk.return_value = risk_output
     mock_reporting.return_value = report_output
 
-    final_state = build_workflow().invoke(workflow_inputs())
+    mock_session = MagicMock()
+    mock_team_repository = MagicMock()
+    mock_team_repository.list_all.return_value = SAMPLE_TEAM
+    with patch(
+        "app.graph.workflow.jira_creation_node",
+        return_value={
+            "jira_issue_keys": {"Build API": "AIPM-1"},
+            "jira_issue_ids": {"Build API": "1"},
+        },
+    ), patch(
+        "app.graph.workflow.status_sync_node",
+        return_value={
+            "statuses": [
+                TaskStatusEntry(
+                    task_title="Build API",
+                    status="todo",
+                    jira_status_name="To Do",
+                    is_overdue=False,
+                )
+            ]
+        },
+    ), patch(
+        "app.database.connection.SessionLocal",
+        return_value=mock_session,
+    ), patch(
+        "app.database.repositories.TeamRepository",
+        return_value=mock_team_repository,
+    ):
+        final_state = build_workflow().invoke(workflow_inputs())
 
     assert final_state["planner_output"] is planner_output
+    assert final_state["jira_issue_keys"] == {"Build API": "AIPM-1"}
+    assert final_state["jira_issue_ids"] == {"Build API": "1"}
     assert final_state["statuses"] == [
-        TaskStatusEntry(task_title="Build API", status="todo", is_overdue=False)
+        TaskStatusEntry(
+            task_title="Build API",
+            status="todo",
+            jira_status_name="To Do",
+            is_overdue=False,
+        )
     ]
     assert final_state["assignment_output"] is assignment_output
     assert final_state["progress_output"] is progress_output
