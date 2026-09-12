@@ -7,7 +7,11 @@ import os
 import httpx
 from dotenv import load_dotenv
 
-from app.integrations.jira.schemas import JiraIssueCreateResponse, JiraIssueResponse
+from app.integrations.jira.schemas import (
+	JiraIssueCreateResponse,
+	JiraIssueResponse,
+	JiraUserResponse,
+)
 
 
 load_dotenv()
@@ -174,3 +178,78 @@ def get_issue(issue_key: str) -> JiraIssueResponse:
 		status=fields["status"]["name"],
 		assignee_email=assignee.get("emailAddress") if assignee else None,
 	)
+
+
+def get_account_id_by_email(email: str) -> JiraUserResponse:
+	"""Find one Jira user by email, rejecting zero or multiple matches explicitly."""
+	base_url, auth_email, token, _ = _load_config()
+	try:
+		response = httpx.get(
+			f"{base_url.rstrip('/')}/rest/api/3/user/search?query={email}",
+			headers=_auth_header(auth_email, token),
+			timeout=10,
+		)
+	except httpx.TimeoutException as error:
+		raise JiraClientError(
+			"Jira network/timeout error while searching for a user"
+		) from error
+	except httpx.ConnectError as error:
+		raise JiraClientError("Jira network/timeout error while connecting") from error
+
+	_raise_http_error(response, "get_account_id_by_email")
+	try:
+		users = response.json()
+	except json.JSONDecodeError as error:
+		raise JiraClientError(
+			f"Jira returned an unparseable response body: {response.text}",
+			status_code=response.status_code,
+			response_body=response.text,
+		) from error
+
+	if not users:
+		raise JiraClientError(
+			f"No Jira user found matching email: {email}",
+			status_code=404,
+			response_body=response.text,
+		)
+	if len(users) > 1:
+		raise JiraClientError(
+			f"Multiple Jira users found matching email: {email}",
+			status_code=409,
+			response_body=response.text,
+		)
+	return JiraUserResponse.model_validate(users[0])
+
+
+def get_assignable_users_for_project(
+	project_key: str | None = None,
+) -> list[JiraUserResponse]:
+	"""Return all Jira users assignable to the selected project."""
+	base_url, auth_email, token, configured_project_key = _load_config()
+	selected_project_key = project_key or configured_project_key
+	try:
+		response = httpx.get(
+			f"{base_url.rstrip('/')}/rest/api/3/user/assignable/search?project={selected_project_key}",
+			headers=_auth_header(auth_email, token),
+			timeout=10,
+		)
+	except httpx.TimeoutException as error:
+		raise JiraClientError(
+			"Jira network/timeout error while searching assignable users"
+		) from error
+	except httpx.ConnectError as error:
+		raise JiraClientError("Jira network/timeout error while connecting") from error
+
+	_raise_http_error(response, "get_assignable_users_for_project")
+	try:
+		users = response.json()
+	except json.JSONDecodeError as error:
+		raise JiraClientError(
+			f"Jira returned an unparseable response body: {response.text}",
+			status_code=response.status_code,
+			response_body=response.text,
+		) from error
+
+	if not users:
+		return []
+	return [JiraUserResponse.model_validate(user) for user in users]
