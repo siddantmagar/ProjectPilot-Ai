@@ -77,6 +77,8 @@ def _text_to_adf(text: str) -> dict:
 
 def _http_error_message(status_code: int, operation: str) -> str:
 	"""Return the Jira-specific explanation for an unsuccessful HTTP status."""
+	if status_code == 400 and operation == "assign_issue":
+		return "Jira rejected the assignment — the account ID may not be a valid assignee for this project."
 	if status_code == 401:
 		return "Jira authentication problem — check JIRA_EMAIL/JIRA_API_TOKEN"
 	if status_code == 403:
@@ -84,6 +86,8 @@ def _http_error_message(status_code: int, operation: str) -> str:
 	if status_code == 404:
 		if operation == "create_issue":
 			return "Jira project or issue type not found — check JIRA_PROJECT_KEY"
+		if operation == "assign_issue":
+			return "Jira issue or account ID not found — check the issue key and account ID"
 		return "Jira issue not found — check the issue key"
 	if status_code == 429:
 		return "Jira rate limited the request"
@@ -178,6 +182,26 @@ def get_issue(issue_key: str) -> JiraIssueResponse:
 		status=fields["status"]["name"],
 		assignee_email=assignee.get("emailAddress") if assignee else None,
 	)
+
+
+def assign_issue(issue_key: str, account_id: str) -> None:
+	"""Assign a Jira issue by account ID; use get_issue() to confirm the result."""
+	base_url, email, token, _ = _load_config()
+	try:
+		response = httpx.put(
+			f"{base_url.rstrip('/')}/rest/api/3/issue/{issue_key}/assignee",
+			headers=_auth_header(email, token),
+			json={"accountId": account_id},
+			timeout=10,
+		)
+	except httpx.TimeoutException as error:
+		raise JiraClientError("Jira network/timeout error while assigning issue") from error
+	except httpx.ConnectError as error:
+		raise JiraClientError("Jira network/timeout error while connecting") from error
+
+	if response.status_code == 204:
+		return None
+	_raise_http_error(response, "assign_issue")
 
 
 def get_account_id_by_email(email: str) -> JiraUserResponse:
