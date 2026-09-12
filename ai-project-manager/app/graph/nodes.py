@@ -18,11 +18,47 @@ def stub_status_node(state: ProjectPilotState) -> dict:
 
 
 def assignment_node(state: ProjectPilotState) -> dict:
-    """Run the assignment agent and update assignment output."""
+    """Run the Assignment Agent against persisted team and assign Jira issues."""
     from app.agents.assignment import run_assignment_agent
+    from app.integrations.jira.client import assign_issue, JiraClientError
+    from app.database.connection import SessionLocal
+    from app.database.repositories import TeamRepository
 
-    result = run_assignment_agent(state["planner_output"].tasks, state["team"])
-    return {"assignment_output": result}
+    session = SessionLocal()
+    try:
+        team_repo = TeamRepository(session)
+        team = team_repo.list_all()
+        if not team:
+            raise RuntimeError(
+                "No team members found in the database — add at least "
+                "one team member before running assignment."
+            )
+
+        assignment_output = run_assignment_agent(state["planner_output"].tasks, team)
+
+        team_by_name = {member.name: member for member in team}
+        jira_issue_keys = state.get("jira_issue_keys") or {}
+
+        for assignment in assignment_output.assignments:
+            member = team_by_name.get(assignment.recommended_assignee)
+            issue_key = jira_issue_keys.get(assignment.task_title)
+
+            if member is None or not member.jira_account_id:
+                continue
+            if issue_key is None:
+                continue
+
+            try:
+                assign_issue(issue_key, member.jira_account_id)
+            except JiraClientError as error:
+                raise RuntimeError(
+                    f"Failed to assign Jira issue {issue_key} to "
+                    f"{member.name}: {error}"
+                ) from error
+
+        return {"assignment_output": assignment_output}
+    finally:
+        session.close()
 
 
 def progress_node(state: ProjectPilotState) -> dict:
