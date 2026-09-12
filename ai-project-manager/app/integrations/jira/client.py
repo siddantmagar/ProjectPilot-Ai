@@ -277,3 +277,39 @@ def get_assignable_users_for_project(
 	if not users:
 		return []
 	return [JiraUserResponse.model_validate(user) for user in users]
+
+
+def search_issues_by_project(project_key: str | None = None) -> list[dict]:
+	"""Fetch raw issue data for a project through Jira's current JQL endpoint."""
+	base_url, email, token, configured_project_key = _load_config()
+	selected_project_key = project_key or configured_project_key
+	try:
+		response = httpx.get(
+			f"{base_url.rstrip('/')}/rest/api/3/search/jql",
+			headers=_auth_header(email, token),
+			params={
+				"jql": f"project = {selected_project_key}",
+				"maxResults": 100,
+				"fields": ["summary", "status", "flagged"],
+			},
+			timeout=10,
+		)
+	except httpx.TimeoutException as error:
+		raise JiraClientError(
+			"Jira network/timeout error while searching project issues"
+		) from error
+	except httpx.ConnectError as error:
+		raise JiraClientError("Jira network/timeout error while connecting") from error
+
+	_raise_http_error(response, "search_issues_by_project")
+	try:
+		data = response.json()
+	except json.JSONDecodeError as error:
+		raise JiraClientError(
+			f"Jira returned an unparseable response body: {response.text}",
+			status_code=response.status_code,
+			response_body=response.text,
+		) from error
+
+	# Larger projects would need to loop on nextPageToken until all issues are fetched.
+	return data["issues"]

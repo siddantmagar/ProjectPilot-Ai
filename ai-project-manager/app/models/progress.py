@@ -9,7 +9,8 @@ class TaskStatusEntry(BaseModel):
     """The current status of one task, matched to a task by title."""
 
     task_title: str
-    status: Literal["todo", "in_progress", "done", "blocked"]
+    status: Literal["todo", "in_progress", "done", "blocked", "unknown"]
+    jira_status_name: str | None = None
     is_overdue: bool = False
 
 
