@@ -52,3 +52,43 @@ def reporting_node(state: ProjectPilotState) -> dict:
         state["risk_output"],
     )
     return {"report_output": result}
+
+
+def jira_creation_node(state: ProjectPilotState) -> dict:
+    """Create or reuse one real Jira issue for each Planner task idempotently."""
+    from app.integrations.jira.client import JiraClientError, create_issue
+    from app.database.connection import SessionLocal
+    from app.database.repositories import TaskJiraLinkRepository
+    import os
+
+    project_key = os.getenv("JIRA_PROJECT_KEY")
+    session = SessionLocal()
+    try:
+        link_repo = TaskJiraLinkRepository(session)
+        issue_keys: dict[str, str] = {}
+
+        for task in state["planner_output"].tasks:
+            existing_key = link_repo.get_issue_key(project_key, task.title)
+            if existing_key:
+                issue_keys[task.title] = existing_key
+                continue
+
+            try:
+                response = create_issue(
+                    summary=task.title,
+                    description=task.description,
+                    issue_type="Task",
+                )
+            except JiraClientError as error:
+                raise RuntimeError(
+                    f"Failed to create Jira issue for task '{task.title}' "
+                    f"after creating {len(issue_keys)} of "
+                    f"{len(state['planner_output'].tasks)} issues: {error}"
+                ) from error
+
+            link_repo.record_link(project_key, task.title, response.key)
+            issue_keys[task.title] = response.key
+
+        return {"jira_issue_keys": issue_keys}
+    finally:
+        session.close()

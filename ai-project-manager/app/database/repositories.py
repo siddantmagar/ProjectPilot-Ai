@@ -8,7 +8,7 @@ import json
 
 from sqlalchemy.orm import Session
 
-from app.database.models import TeamMemberORM
+from app.database.models import TaskJiraLinkORM, TeamMemberORM
 from app.models.team import TeamMember
 
 
@@ -79,3 +79,33 @@ class TeamRepository:
 			email=row.email,
 			weekly_capacity_hours=row.weekly_capacity_hours,
 		)
+
+
+class TaskJiraLinkRepository:
+	"""Persist task-title-to-Jira-issue-key links across graph runs."""
+
+	def __init__(self, session: Session) -> None:
+		self._session = session
+
+	def get_issue_key(self, project_key: str, task_title: str) -> str | None:
+		"""Return the existing Jira issue key for this project task, if any."""
+		row = self._session.query(TaskJiraLinkORM).filter_by(
+			project_key=project_key,
+			task_title=task_title,
+		).first()
+		return row.jira_issue_key if row else None
+
+	def record_link(
+		self,
+		project_key: str,
+		task_title: str,
+		jira_issue_key: str,
+	) -> None:
+		"""Store a task-to-issue link after the caller's duplicate pre-check."""
+		row = TaskJiraLinkORM(
+			project_key=project_key,
+			task_title=task_title,
+			jira_issue_key=jira_issue_key,
+		)
+		self._session.add(row)
+		self._session.commit()

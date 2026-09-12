@@ -6,6 +6,7 @@ from app.graph.nodes import (
 	progress_node,
 	reporting_node,
 	risk_node,
+	jira_creation_node,
 	stub_status_node,
 )
 from app.graph.state import ProjectPilotState
@@ -19,6 +20,7 @@ def build_workflow():
 	graph = StateGraph(ProjectPilotState)
 
 	graph.add_node("planner", planner_node)
+	graph.add_node("jira_creation", jira_creation_node)
 	graph.add_node("stub_status", stub_status_node)
 	graph.add_node("assignment", assignment_node)
 	graph.add_node("progress", progress_node)
@@ -26,7 +28,8 @@ def build_workflow():
 	graph.add_node("reporting", reporting_node)
 
 	graph.add_edge(START, "planner")
-	graph.add_edge("planner", "stub_status")
+	graph.add_edge("planner", "jira_creation")
+	graph.add_edge("jira_creation", "stub_status")
 	graph.add_edge("stub_status", "assignment")
 	graph.add_edge("assignment", "progress")
 	graph.add_edge("progress", "risk")
