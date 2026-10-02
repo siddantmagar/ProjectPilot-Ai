@@ -30,3 +30,5 @@ class ProjectPilotState(TypedDict):
 	report_output: Optional[ReportOutput]
 	jira_issue_keys: Optional[dict[str, str]]
 	jira_issue_ids: Optional[dict[str, str]]
+	_approval_decision: Optional[dict]
+	_approval_payload: Optional[dict]

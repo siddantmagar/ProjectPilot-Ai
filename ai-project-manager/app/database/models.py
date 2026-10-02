@@ -42,3 +42,17 @@ class TaskJiraLinkORM(Base):
     __table_args__ = (
         UniqueConstraint("project_key", "task_title", name="uq_project_task_title"),
     )
+
+
+class AuditLogORM(Base):
+    """Record AI recommendations and resulting human approval decisions."""
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_key: Mapped[str] = mapped_column(String(50), nullable=False)
+    decision_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    proposed_payload_json: Mapped[str] = mapped_column(String, nullable=False)
+    human_decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    final_payload_json: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(50), nullable=False)

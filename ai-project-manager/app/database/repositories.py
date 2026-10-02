@@ -8,7 +8,7 @@ import json
 
 from sqlalchemy.orm import Session
 
-from app.database.models import TaskJiraLinkORM, TeamMemberORM
+from app.database.models import AuditLogORM, TaskJiraLinkORM, TeamMemberORM
 from app.models.team import TeamMember
 
 
@@ -119,3 +119,53 @@ class TaskJiraLinkRepository:
 		)
 		self._session.add(row)
 		self._session.commit()
+
+
+class AuditLogRepository:
+	"""Persist human decisions on AI-proposed actions."""
+
+	def __init__(self, session: Session) -> None:
+		self._session = session
+
+	def record_decision(
+		self,
+		project_key: str,
+		decision_type: str,
+		proposed_payload: dict,
+		human_decision: str,
+		final_payload: dict | None,
+	) -> None:
+		"""Record one AI recommendation and its human decision."""
+		from datetime import datetime, timezone
+
+		row = AuditLogORM(
+			project_key=project_key,
+			decision_type=decision_type,
+			proposed_payload_json=json.dumps(proposed_payload),
+			human_decision=human_decision,
+			final_payload_json=json.dumps(final_payload) if final_payload else None,
+			created_at=datetime.now(timezone.utc).isoformat(),
+		)
+		self._session.add(row)
+		self._session.commit()
+
+	def list_for_project(self, project_key: str) -> list[dict]:
+		"""Return chronological audit decisions for one project."""
+		rows = self._session.query(AuditLogORM).filter_by(
+			project_key=project_key
+		).order_by(AuditLogORM.created_at).all()
+		return [
+			{
+				"decision_type": row.decision_type,
+				"human_decision": row.human_decision,
+				"created_at": row.created_at,
+				"proposed_payload": json.loads(row.proposed_payload_json),
+				"final_payload": (
+					json.loads(row.final_payload_json)
+					if row.final_payload_json
+					else None
+				),
+			}
+			for row in rows
+		]
+	

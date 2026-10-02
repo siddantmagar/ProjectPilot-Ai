@@ -9,6 +9,87 @@ def planner_node(state: ProjectPilotState) -> dict:
     return {"planner_output": result}
 
 
+def plan_approval_node(state: ProjectPilotState) -> dict:
+    """Pause for human approval before creating Jira issues from the plan."""
+    from langgraph.types import interrupt
+
+    planner_output = state["planner_output"]
+    proposed_payload = {
+        "epics": planner_output.epics,
+        "tasks": [
+            {
+                "title": task.title,
+                "description": task.description,
+                "priority": task.priority,
+                "estimated_days": task.estimated_days,
+                "epic": task.epic,
+            }
+            for task in planner_output.tasks
+        ],
+    }
+
+    decision = interrupt(
+        {
+            "type": "plan_approval",
+            "proposed_plan": proposed_payload,
+        }
+    )
+
+    if decision["action"] == "modify":
+        from app.models.task import PlannerOutput, Task
+
+        edited_tasks = [Task(**task) for task in decision["edited_tasks"]]
+        updated_planner_output = PlannerOutput(
+            epics=planner_output.epics,
+            tasks=edited_tasks,
+        )
+        return {
+            "planner_output": updated_planner_output,
+            "_approval_decision": decision,
+            "_approval_payload": proposed_payload,
+        }
+
+    # Approve and reject decisions are routed after audit logging.
+    return {"_approval_decision": decision, "_approval_payload": proposed_payload}
+
+
+def audit_log_node(state: ProjectPilotState) -> dict:
+    """Persist the human's approval decision to the audit log."""
+    from app.database.connection import SessionLocal
+    from app.database.repositories import AuditLogRepository
+    import os
+
+    project_key = os.getenv("JIRA_PROJECT_KEY")
+    decision = state.get("_approval_decision")
+    if decision is None:
+        return {}
+
+    session = SessionLocal()
+    try:
+        repo = AuditLogRepository(session)
+        final_payload = None
+        if decision["action"] == "approve":
+            approval_payload = state.get("_approval_payload", {})
+            final_payload = (
+                approval_payload["proposed_plan"]
+                if "proposed_plan" in approval_payload
+                else approval_payload
+            )
+        elif decision["action"] == "modify":
+            final_payload = {"tasks": decision["edited_tasks"]}
+
+        repo.record_decision(
+            project_key=project_key,
+            decision_type="plan_approval",
+            proposed_payload=state["_approval_payload"],
+            human_decision=decision["action"],
+            final_payload=final_payload,
+        )
+        return {}
+    finally:
+        session.close()
+
+
 def status_sync_node(state: ProjectPilotState) -> dict:
     """Replace stubbed statuses with real Jira status data and mapped states."""
     from app.integrations.jira.client import search_issues_by_project

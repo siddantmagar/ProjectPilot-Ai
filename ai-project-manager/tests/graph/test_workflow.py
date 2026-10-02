@@ -114,6 +114,12 @@ def test_workflow_structure_with_mocked_agents(
             "jira_issue_ids": {"Build API": "1"},
         },
     ), patch(
+        "app.graph.workflow.plan_approval_node",
+        return_value={
+            "_approval_decision": {"action": "approve"},
+            "_approval_payload": {"epics": ["Backend"]},
+        },
+    ), patch(
         "app.graph.workflow.status_sync_node",
         return_value={
             "statuses": [
@@ -132,7 +138,10 @@ def test_workflow_structure_with_mocked_agents(
         "app.database.repositories.TeamRepository",
         return_value=mock_team_repository,
     ):
-        final_state = build_workflow().invoke(workflow_inputs())
+        final_state = build_workflow().invoke(
+            workflow_inputs(),
+            config={"configurable": {"thread_id": "workflow-test"}},
+        )
 
     assert final_state["planner_output"] is planner_output
     assert final_state["jira_issue_keys"] == {"Build API": "AIPM-1"}
@@ -154,7 +163,23 @@ def test_workflow_structure_with_mocked_agents(
 @pytest.mark.integration
 def test_workflow_end_to_end_real_agents() -> None:
     """Protect against the full linear chain producing an incoherent final report."""
-    final_state = build_workflow().invoke(workflow_inputs())
+    import uuid
+
+    from langgraph.types import Command
+
+    graph = build_workflow()
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+    # First invocation pauses at the plan-approval interrupt.
+    paused_state = graph.invoke(workflow_inputs(), config=config)
+    assert "__interrupt__" in paused_state, (
+        "Expected the graph to pause for plan approval before proceeding"
+    )
+
+    # Resume with approval to let the full chain complete.
+    final_state = graph.invoke(
+        Command(resume={"action": "approve"}), config=config
+    )
 
     report_output = final_state["report_output"]
     planner_output = final_state["planner_output"]
