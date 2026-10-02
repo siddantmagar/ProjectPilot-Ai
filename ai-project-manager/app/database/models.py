@@ -34,6 +34,7 @@ class TaskJiraLinkORM(Base):
     __tablename__ = "task_jira_links"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     project_key: Mapped[str] = mapped_column(String(50), nullable=False)
     task_title: Mapped[str] = mapped_column(String(500), nullable=False)
     jira_issue_key: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -50,9 +51,28 @@ class AuditLogORM(Base):
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     project_key: Mapped[str] = mapped_column(String(50), nullable=False)
     decision_type: Mapped[str] = mapped_column(String(50), nullable=False)
     proposed_payload_json: Mapped[str] = mapped_column(String, nullable=False)
     human_decision: Mapped[str] = mapped_column(String(20), nullable=False)
     final_payload_json: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(50), nullable=False)
+
+
+class ProjectORM(Base):
+    """One planning run: one submitted goal and workflow invocation.
+
+    There is deliberately no relationship to other Project rows yet. A richer
+    "one product, many runs" model is deferred until RAG-based duplicate and
+    overlap detection exists in roadmap M17.
+    """
+
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    jira_project_key: Mapped[str] = mapped_column(String(50), nullable=False)
+    goal: Mapped[str] = mapped_column(String(2000), nullable=False)
+    deadline: Mapped[str] = mapped_column(String(100), nullable=False)
+    team_size: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[str] = mapped_column(String(50), nullable=False)

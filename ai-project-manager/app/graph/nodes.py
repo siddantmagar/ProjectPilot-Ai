@@ -1,6 +1,27 @@
 from app.graph.state import ProjectPilotState
 
 
+def create_project_node(state: ProjectPilotState) -> dict:
+    """Persist this planning run and return its project ID downstream."""
+    from app.database.connection import SessionLocal
+    from app.database.repositories import ProjectRepository
+    import os
+
+    project_key = os.getenv("JIRA_PROJECT_KEY")
+    session = SessionLocal()
+    try:
+        repo = ProjectRepository(session)
+        project_id = repo.create(
+            jira_project_key=project_key,
+            goal=state["goal"],
+            deadline=state["deadline"],
+            team_size=state["team_size"],
+        )
+        return {"project_id": project_id}
+    finally:
+        session.close()
+
+
 def planner_node(state: ProjectPilotState) -> dict:
     """Run the planner agent and update planner output."""
     from app.agents.planner import run_planner_agent
@@ -84,6 +105,7 @@ def audit_log_node(state: ProjectPilotState) -> dict:
             proposed_payload=state["_approval_payload"],
             human_decision=decision["action"],
             final_payload=final_payload,
+            project_id=state.get("project_id"),
         )
         return {}
     finally:
@@ -244,6 +266,7 @@ def jira_creation_node(state: ProjectPilotState) -> dict:
                 task.title,
                 response.key,
                 response.id,
+                state.get("project_id"),
             )
             issue_keys[task.title] = response.key
             issue_ids[task.title] = response.id

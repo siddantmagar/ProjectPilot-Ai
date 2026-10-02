@@ -5,6 +5,7 @@ from langgraph.graph import END, START, StateGraph
 from app.graph.nodes import (
 	assignment_node,
 	audit_log_node,
+	create_project_node,
 	plan_approval_node,
 	planner_node,
 	progress_node,
@@ -35,6 +36,7 @@ def build_workflow():
 	graph = StateGraph(ProjectPilotState)
 
 	graph.add_node("planner", planner_node)
+	graph.add_node("create_project", create_project_node)
 	graph.add_node("plan_approval", plan_approval_node)
 	graph.add_node("audit_log", audit_log_node)
 	graph.add_node("jira_creation", jira_creation_node)
@@ -44,7 +46,8 @@ def build_workflow():
 	graph.add_node("risk", risk_node)
 	graph.add_node("reporting", reporting_node)
 
-	graph.add_edge(START, "planner")
+	graph.add_edge(START, "create_project")
+	graph.add_edge("create_project", "planner")
 	graph.add_edge("planner", "plan_approval")
 	graph.add_edge("plan_approval", "audit_log")
 	graph.add_conditional_edges(

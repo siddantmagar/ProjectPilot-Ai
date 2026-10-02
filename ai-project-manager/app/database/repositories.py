@@ -8,7 +8,12 @@ import json
 
 from sqlalchemy.orm import Session
 
-from app.database.models import AuditLogORM, TaskJiraLinkORM, TeamMemberORM
+from app.database.models import (
+	AuditLogORM,
+	ProjectORM,
+	TaskJiraLinkORM,
+	TeamMemberORM,
+)
 from app.models.team import TeamMember
 
 
@@ -109,6 +114,7 @@ class TaskJiraLinkRepository:
 		task_title: str,
 		jira_issue_key: str,
 		jira_issue_id: str,
+		project_id: int | None = None,
 	) -> None:
 		"""Store a task-to-issue link after the caller's duplicate pre-check."""
 		row = TaskJiraLinkORM(
@@ -116,9 +122,24 @@ class TaskJiraLinkRepository:
 			task_title=task_title,
 			jira_issue_key=jira_issue_key,
 			jira_issue_id=jira_issue_id,
+			project_id=project_id,
 		)
 		self._session.add(row)
 		self._session.commit()
+
+	def list_for_project(self, project_id: int) -> list[dict]:
+		"""Return all task-Jira links recorded for a project ID."""
+		rows = self._session.query(TaskJiraLinkORM).filter_by(
+			project_id=project_id
+		).all()
+		return [
+			{
+				"task_title": row.task_title,
+				"jira_issue_key": row.jira_issue_key,
+				"project_id": row.project_id,
+			}
+			for row in rows
+		]
 
 
 class AuditLogRepository:
@@ -134,6 +155,7 @@ class AuditLogRepository:
 		proposed_payload: dict,
 		human_decision: str,
 		final_payload: dict | None,
+		project_id: int | None = None,
 	) -> None:
 		"""Record one AI recommendation and its human decision."""
 		from datetime import datetime, timezone
@@ -144,6 +166,7 @@ class AuditLogRepository:
 			proposed_payload_json=json.dumps(proposed_payload),
 			human_decision=human_decision,
 			final_payload_json=json.dumps(final_payload) if final_payload else None,
+			project_id=project_id,
 			created_at=datetime.now(timezone.utc).isoformat(),
 		)
 		self._session.add(row)
@@ -165,6 +188,88 @@ class AuditLogRepository:
 					if row.final_payload_json
 					else None
 				),
+			}
+			for row in rows
+		]
+
+	def list_for_project_id(self, project_id: int) -> list[dict]:
+		"""Return chronological audit decisions for a project ID."""
+		rows = self._session.query(AuditLogORM).filter_by(
+			project_id=project_id
+		).order_by(AuditLogORM.created_at).all()
+		return [
+			{
+				"decision_type": row.decision_type,
+				"human_decision": row.human_decision,
+				"created_at": row.created_at,
+				"proposed_payload": json.loads(row.proposed_payload_json),
+				"final_payload": (
+					json.loads(row.final_payload_json)
+					if row.final_payload_json
+					else None
+				),
+			}
+			for row in rows
+		]
+
+
+class ProjectNotFoundError(Exception):
+	"""Raised when a lookup finds no matching project."""
+
+
+class ProjectRepository:
+	"""Persist and retrieve Project rows, one row per planning run."""
+
+	def __init__(self, session: Session) -> None:
+		self._session = session
+
+	def create(
+		self,
+		jira_project_key: str,
+		goal: str,
+		deadline: str,
+		team_size: int,
+	) -> int:
+		"""Insert a new project row and return its ID."""
+		from datetime import datetime, timezone
+
+		row = ProjectORM(
+			jira_project_key=jira_project_key,
+			goal=goal,
+			deadline=deadline,
+			team_size=team_size,
+			created_at=datetime.now(timezone.utc).isoformat(),
+		)
+		self._session.add(row)
+		self._session.commit()
+		self._session.refresh(row)
+		return row.id
+
+	def get_by_id(self, project_id: int) -> dict:
+		"""Return a project's fields or raise ProjectNotFoundError."""
+		row = self._session.query(ProjectORM).filter_by(id=project_id).first()
+		if row is None:
+			raise ProjectNotFoundError(f"No project with id={project_id}")
+		return {
+			"id": row.id,
+			"jira_project_key": row.jira_project_key,
+			"goal": row.goal,
+			"deadline": row.deadline,
+			"team_size": row.team_size,
+			"created_at": row.created_at,
+		}
+
+	def list_all(self) -> list[dict]:
+		"""Return all projects, newest first."""
+		rows = self._session.query(ProjectORM).order_by(ProjectORM.created_at.desc()).all()
+		return [
+			{
+				"id": row.id,
+				"jira_project_key": row.jira_project_key,
+				"goal": row.goal,
+				"deadline": row.deadline,
+				"team_size": row.team_size,
+				"created_at": row.created_at,
 			}
 			for row in rows
 		]
