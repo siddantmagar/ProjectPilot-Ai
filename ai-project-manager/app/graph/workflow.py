@@ -6,6 +6,7 @@ from app.graph.nodes import (
 	assignment_node,
 	audit_log_node,
 	create_project_node,
+	health_node,
 	plan_approval_node,
 	planner_node,
 	progress_node,
@@ -16,6 +17,7 @@ from app.graph.nodes import (
 )
 from app.graph.state import ProjectPilotState
 from app.models.assignment import AssignmentOutput, TaskAssignment
+from app.models.health import HealthStatus
 from app.models.progress import ProgressOutput, TaskStatusEntry
 from app.models.report import ReportOutput
 from app.models.risk import RiskFlag, RiskOutput
@@ -44,6 +46,7 @@ def build_workflow():
 	graph.add_node("assignment", assignment_node)
 	graph.add_node("progress", progress_node)
 	graph.add_node("risk", risk_node)
+	graph.add_node("health", health_node)
 	graph.add_node("reporting", reporting_node)
 
 	graph.add_edge(START, "create_project")
@@ -59,13 +62,15 @@ def build_workflow():
 	graph.add_edge("status_sync", "assignment")
 	graph.add_edge("assignment", "progress")
 	graph.add_edge("progress", "risk")
-	graph.add_edge("risk", "reporting")
+	graph.add_edge("risk", "health")
+	graph.add_edge("health", "reporting")
 	graph.add_edge("reporting", END)
 
 	serde = JsonPlusSerializer(
 		allowed_msgpack_modules=[
 			AssignmentOutput,
 			TaskAssignment,
+			HealthStatus,
 			ProgressOutput,
 			TaskStatusEntry,
 			ReportOutput,

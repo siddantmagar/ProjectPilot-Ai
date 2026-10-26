@@ -2,6 +2,7 @@ from typing import Optional, TypedDict
 
 from app.models.task import PlannerOutput
 from app.models.assignment import AssignmentOutput
+from app.models.health import HealthStatus
 from app.models.progress import ProgressOutput, TaskStatusEntry
 from app.models.risk import RiskOutput
 from app.models.report import ReportOutput
@@ -27,6 +28,7 @@ class ProjectPilotState(TypedDict):
 	assignment_output: Optional[AssignmentOutput]
 	progress_output: Optional[ProgressOutput]
 	risk_output: Optional[RiskOutput]
+	health_output: Optional[HealthStatus]
 	report_output: Optional[ReportOutput]
 	jira_issue_keys: Optional[dict[str, str]]
 	jira_issue_ids: Optional[dict[str, str]]

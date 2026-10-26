@@ -212,6 +212,16 @@ def risk_node(state: ProjectPilotState) -> dict:
     return {"risk_output": result}
 
 
+def health_node(state):
+    from app.agents.health import compute_health
+
+    return {
+        "health_output": compute_health(
+            state["progress_output"], state["risk_output"]
+        )
+    }
+
+
 def reporting_node(state: ProjectPilotState) -> dict:
     """Run the reporting agent and update report output."""
     from app.agents.reporting import run_reporting_agent

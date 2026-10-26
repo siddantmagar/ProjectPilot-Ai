@@ -61,6 +61,10 @@ def display_results(result: dict) -> None:
 	progress_columns[2].metric("Blocked", progress_output.blocked_tasks)
 	progress_columns[3].metric("Overdue", len(progress_output.overdue_task_titles))
 
+	badge = {"green": "🟢", "yellow": "🟡", "red": "🔴"}[result["health_output"].status]
+	st.subheader(f"{badge} Project Health")
+	st.write(result["health_output"].explanation)
+
 	st.header("Risks")
 	risk_output = result["risk_output"]
 	if not risk_output.risks:
